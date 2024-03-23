@@ -1,7 +1,7 @@
 use std::{
     collections::HashMap,
     ffi::{c_char, CStr},
-    time::SystemTime,
+    time::{Duration, SystemTime},
 };
 
 use openxr_sys::{
@@ -260,8 +260,12 @@ impl OpenXRLayer {
 
         // println!("--> get_action_state_pose {:?}", (*get_info).subaction_path);
 
+        let eye_gaze_data = self.server.eye_gaze_data.lock().unwrap();
         let state = &mut *state;
-        state.is_active = true.into();
+
+        // Report tracking as disabled if there is no data incoming.
+        state.is_active =
+            (eye_gaze_data.time.elapsed().unwrap() < Duration::from_millis(50)).into();
 
         // println!("<-- get_action_state_pose");
         Result::SUCCESS
