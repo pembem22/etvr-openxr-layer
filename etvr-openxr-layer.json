@@ -1,0 +1,20 @@
+{
+  "file_format_version": "1.0.0",
+  "api_layer": {
+    "name": "XR_APILAYER_etvr",
+    "library_path": "libetvr_openxr_layer.so",
+    "api_version": "1.0",
+    "implementation_version": "1",
+    "description": "Expose ETVR data as the XR_EXT_eye_gaze_interaction extension",
+    "functions": {
+      "xrNegotiateLoaderApiLayerInterface": "xrNegotiateLoaderApiLayerInterface"
+    },
+    "instance_extensions": [
+      {
+        "name": "XR_EXT_eye_gaze_interaction",
+        "extension_version": "1"
+      }
+    ],
+    "disable_environment": "DISABLE_XR_APILAYER_ETVR"
+  }
+}
