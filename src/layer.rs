@@ -298,11 +298,7 @@ impl OpenXRLayer {
         let q = quat::from_euler_angles(
             quat::RotationType::Extrinsic,
             quat::RotationSequence::XYZ,
-            [
-                -eye_gaze_data.l_pitch.to_radians(),
-                -eye_gaze_data.l_yaw.to_radians(),
-                0.0,
-            ],
+            [eye_gaze_data.l_pitch, eye_gaze_data.l_yaw, 0.0],
         );
 
         // TODO: Figure out if this is correct position.
