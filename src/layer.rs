@@ -7,8 +7,8 @@ use std::{
 use openxr_sys::{
     pfn, Action, ActionSpaceCreateInfo, ActionStateGetInfo, ActionStatePose, BaseOutStructure,
     ExtensionProperties, EyeGazeSampleTimeEXT, Instance, InteractionProfileSuggestedBinding, Path,
-    Result, Session, Space, SpaceLocation, SpaceLocationFlags, StructureType,
-    SystemEyeGazeInteractionPropertiesEXT, SystemId, SystemProperties, Time,
+    Quaternionf, Result, Session, Space, SpaceLocation, SpaceLocationFlags, StructureType,
+    SystemEyeGazeInteractionPropertiesEXT, SystemId, SystemProperties, Time, Vector3f,
 };
 
 use once_cell::sync::Lazy;
@@ -280,9 +280,10 @@ impl OpenXRLayer {
     ) -> Result {
         // println!("--> locate_space {:?} {:?} {:?}", space, base_space, time);
 
-        if !self.l_eye_gaze_space.is_some_and(|s| s == space)
-            && !self.r_eye_gaze_space.is_some_and(|s| s == space)
-        {
+        let is_left = self.l_eye_gaze_space.is_some_and(|s| s == space);
+        let is_right = self.r_eye_gaze_space.is_some_and(|s| s == space);
+
+        if !is_left && !is_right {
             return self.locate_space.unwrap()(space, base_space, time, location);
         }
 
@@ -295,25 +296,32 @@ impl OpenXRLayer {
 
         let eye_gaze_data = self.server.eye_gaze_data.lock().unwrap();
 
-        // Steam Link seems to request only left eye, so always send left eye gaze.
-        assert!(self.l_eye_gaze_space.is_some_and(|s| s == space));
-        // TODO: Check what eye is requested.
+        let (pitch, yaw) = if is_left {
+            (eye_gaze_data.l_pitch, eye_gaze_data.l_yaw)
+        } else {
+            (eye_gaze_data.r_pitch, eye_gaze_data.r_yaw)
+        };
+
         use quaternion_core as quat;
         let q = quat::from_euler_angles(
             quat::RotationType::Extrinsic,
             quat::RotationSequence::XYZ,
-            [eye_gaze_data.l_pitch, eye_gaze_data.l_yaw, 0.0],
+            [pitch, yaw, 0.0],
         );
 
         // TODO: Figure out if this is correct position.
         // If eyeball position is required, can use `xrLocateView` to query camera position.
-        location.pose.position.x = 0.0;
-        location.pose.position.y = 0.0;
-        location.pose.position.z = 0.0;
-        location.pose.orientation.w = q.0;
-        location.pose.orientation.x = q.1[0];
-        location.pose.orientation.y = q.1[1];
-        location.pose.orientation.z = q.1[2];
+        location.pose.position = Vector3f {
+            x: 0.0,
+            y: 0.0,
+            z: 0.0,
+        };
+        location.pose.orientation = Quaternionf {
+            w: q.0,
+            x: q.1[0],
+            y: q.1[1],
+            z: q.1[2],
+        };
 
         // println!("locate_space {:?}", location);
 
