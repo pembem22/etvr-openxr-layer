@@ -13,22 +13,9 @@ use openxr_sys::{
 
 use once_cell::sync::Lazy;
 
-pub static mut INSTANCE: OpenXRLayer = OpenXRLayer {
-    instance: None,
-    get_instance_proc_addr: None,
-    enumerate_instance_extensions_properties: None,
-    get_system_properties: None,
-    suggest_interaction_profile_bindings: None,
-    path_to_string: None,
-    eye_gaze_action: None,
-    create_action_space: None,
-    l_eye_gaze_space: None,
-    r_eye_gaze_space: None,
-    get_action_state_pose: None,
-    locate_space: None,
-    possible_spaces: Lazy::new(|| HashMap::new()),
-    start_time: Lazy::new(|| SystemTime::now()),
-};
+use crate::server::OSCServer;
+
+pub static mut INSTANCE: Lazy<OpenXRLayer> = Lazy::new(|| OpenXRLayer::new());
 
 struct Extension {
     name: &'static str,
@@ -51,16 +38,42 @@ pub struct OpenXRLayer {
     pub get_action_state_pose: Option<pfn::GetActionStatePose>,
     pub locate_space: Option<pfn::LocateSpace>,
 
-    possible_spaces: Lazy<HashMap<(Action, Path), Space>>,
+    possible_spaces: HashMap<(Action, Path), Space>,
 
     eye_gaze_action: Option<Action>,
     l_eye_gaze_space: Option<Space>,
     r_eye_gaze_space: Option<Space>,
 
-    start_time: Lazy<SystemTime>,
+    start_time: SystemTime,
+
+    server: OSCServer,
 }
 
 impl OpenXRLayer {
+    pub fn new() -> OpenXRLayer {
+        let res = OpenXRLayer {
+            instance: None,
+            get_instance_proc_addr: None,
+            enumerate_instance_extensions_properties: None,
+            get_system_properties: None,
+            suggest_interaction_profile_bindings: None,
+            path_to_string: None,
+            eye_gaze_action: None,
+            create_action_space: None,
+            l_eye_gaze_space: None,
+            r_eye_gaze_space: None,
+            get_action_state_pose: None,
+            locate_space: None,
+            possible_spaces: HashMap::new(),
+            start_time: SystemTime::now(),
+            server: OSCServer::new(),
+        };
+
+        res.server.run();
+
+        res
+    }
+
     pub unsafe fn enumerate_instance_extension_properties(
         &self,
         layer_name: *const c_char,
@@ -183,6 +196,7 @@ impl OpenXRLayer {
 
                 if let Some(l_eye_gaze_space) = self
                     .possible_spaces
+                    // TODO: Don't hardcode "/user/hand/left" as Path(1)
                     .get(&(suggested_binding.action, Path::from_raw(1)))
                 {
                     self.l_eye_gaze_space = Some(*l_eye_gaze_space);
@@ -190,6 +204,7 @@ impl OpenXRLayer {
                 }
                 if let Some(r_eye_gaze_space) = self
                     .possible_spaces
+                    // TODO: Don't hardcode "/user/hand/right" as Path(2)
                     .get(&(suggested_binding.action, Path::from_raw(2)))
                 {
                     self.r_eye_gaze_space = Some(*r_eye_gaze_space);
@@ -200,8 +215,8 @@ impl OpenXRLayer {
 
                 println!(
                     "test {:?} {:?}",
-                    self.path_to_string(instance, Path::from_raw(1)),
-                    self.path_to_string(instance, Path::from_raw(2))
+                    self.path_to_string(instance, Path::from_raw(1)), // "/user/hand/left"
+                    self.path_to_string(instance, Path::from_raw(2)), // "/user/hand/right"
                 );
             }
         }
@@ -261,36 +276,37 @@ impl OpenXRLayer {
     ) -> Result {
         // println!("--> locate_space {:?} {:?} {:?}", space, base_space, time);
 
-        if !(*location).next.is_null()
-            && (*((*location).next as *mut BaseOutStructure)).ty
-                == StructureType::EYE_GAZE_SAMPLE_TIME_EXT
-        {
-            println!("HEREEEEEEEEEE");
-        }
-
         if !self.l_eye_gaze_space.is_some_and(|s| s == space)
             && !self.r_eye_gaze_space.is_some_and(|s| s == space)
         {
             return self.locate_space.unwrap()(space, base_space, time, location);
         }
 
-        println!("locate_space {:?} {:?}", space, base_space);
+        // println!("locate_space {:?} {:?}", space, base_space);
 
         let location = &mut *location;
 
         location.location_flags |= SpaceLocationFlags::POSITION_TRACKED;
         location.location_flags |= SpaceLocationFlags::ORIENTATION_TRACKED;
 
+        let eye_gaze_data = self.server.eye_gaze_data.lock().unwrap();
+
+        // Steam Link seems to request only left eye, so always send left eye gaze.
+        assert!(self.l_eye_gaze_space.is_some_and(|s| s == space));
+        // TODO: Check what eye is requested.
         use quaternion_core as quat;
         let q = quat::from_euler_angles(
             quat::RotationType::Extrinsic,
             quat::RotationSequence::XYZ,
             [
-                f32::cos(self.start_time.elapsed().unwrap().as_secs_f32()) / 4.0,
-                f32::sin(self.start_time.elapsed().unwrap().as_secs_f32()) / 4.0,
+                -eye_gaze_data.l_pitch.to_radians(),
+                -eye_gaze_data.l_yaw.to_radians(),
                 0.0,
             ],
         );
+
+        // TODO: Figure out if this is correct position.
+        // If eyeball position is required, can use `xrLocateView` to query camera position.
         location.pose.position.x = 0.0;
         location.pose.position.y = 0.0;
         location.pose.position.z = 0.0;
@@ -299,12 +315,12 @@ impl OpenXRLayer {
         location.pose.orientation.y = q.1[1];
         location.pose.orientation.z = q.1[2];
 
-        println!("locate_space {:?}", location);
+        // println!("locate_space {:?}", location);
 
         if !location.next.is_null() {
             let eye_gaze_sample_time = &mut *(location.next as *mut EyeGazeSampleTimeEXT);
             eye_gaze_sample_time.time = Time::from_nanos(0);
-            println!("locate_space {:?}", eye_gaze_sample_time);
+            // println!("locate_space {:?}", eye_gaze_sample_time);
         }
 
         Result::SUCCESS

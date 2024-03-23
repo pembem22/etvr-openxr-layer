@@ -8,6 +8,7 @@ use std::os::raw::c_char;
 
 mod dispatch;
 mod layer;
+mod server;
 
 #[no_mangle]
 pub unsafe extern "C" fn xrNegotiateLoaderApiLayerInterface(
