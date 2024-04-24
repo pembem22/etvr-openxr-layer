@@ -15,7 +15,7 @@ use once_cell::sync::Lazy;
 
 use crate::server::OSCServer;
 
-pub static mut INSTANCE: Lazy<OpenXRLayer> = Lazy::new(|| OpenXRLayer::new());
+pub static mut INSTANCE: Lazy<OpenXRLayer> = Lazy::new(OpenXRLayer::new);
 
 struct Extension {
     name: &'static str,
@@ -141,7 +141,7 @@ impl OpenXRLayer {
                 property.supports_eye_gaze_interaction = true.into();
             }
 
-            property_ptr = property.next as *mut BaseOutStructure;
+            property_ptr = property.next;
         }
 
         let result = self.get_system_properties.unwrap()(instance, system_id, properties);
@@ -335,15 +335,14 @@ impl OpenXRLayer {
     }
 
     pub unsafe fn path_to_string(&self, instance: Instance, path: Path) -> String {
-        let mut buffer: Vec<u8> = Vec::new();
-        buffer.resize(128, 0);
+        let mut buffer = vec![0u8; 128];
         let mut out_size = 0u32;
         self.path_to_string.unwrap()(
             instance,
             path,
             buffer.len().try_into().unwrap(),
             &mut out_size as *mut u32,
-            buffer.as_mut_ptr() as *mut u8,
+            buffer.as_mut_ptr() as *mut i8,
         );
 
         CStr::from_bytes_until_nul(&buffer[..out_size as usize])
