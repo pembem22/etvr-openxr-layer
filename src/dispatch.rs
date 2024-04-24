@@ -62,12 +62,11 @@ pub unsafe extern "system" fn xr_get_instance_proc_addr(
     name_ptr: *const c_char,
     function: *mut Option<pfn::VoidFunction>,
 ) -> Result {
-    let api_name = CStr::from_ptr(name_ptr);
-    if instance.into_raw() == 0
-        && !(api_name
-            == CStr::from_bytes_with_nul_unchecked(b"xrEnumerateInstanceExtensionProperties\0")
-            || api_name == CStr::from_bytes_with_nul_unchecked(b"xrEnumerateApiLayerProperties\0")
-            || api_name == CStr::from_bytes_with_nul_unchecked(b"xrCreateInstance\0"))
+    let api_name = CStr::from_ptr(name_ptr).to_string_lossy().to_string();
+    if instance == Instance::NULL
+        && !(api_name == "xrEnumerateInstanceExtensionProperties"
+            || api_name == "xrEnumerateApiLayerProperties"
+            || api_name == "xrCreateInstance")
     {
         return Result::ERROR_HANDLE_INVALID;
     }
@@ -80,8 +79,7 @@ pub unsafe extern "system" fn xr_get_instance_proc_addr(
 
     let result = INSTANCE.get_instance_proc_addr.unwrap()(instance, name_ptr, function);
 
-    if api_name == CStr::from_bytes_with_nul_unchecked(b"xrEnumerateInstanceExtensionProperties\0")
-    {
+    if api_name == "xrEnumerateInstanceExtensionProperties" {
         INSTANCE.enumerate_instance_extensions_properties = Some(std::mem::transmute::<
             pfn::VoidFunction,
             pfn::EnumerateInstanceExtensionProperties,
@@ -92,7 +90,7 @@ pub unsafe extern "system" fn xr_get_instance_proc_addr(
         >(xr_enumerate_instance_extension_properties));
     }
 
-    if api_name == CStr::from_bytes_with_nul_unchecked(b"xrGetSystemProperties\0") {
+    if api_name == "xrGetSystemProperties" {
         INSTANCE.get_system_properties = Some(std::mem::transmute::<
             pfn::VoidFunction,
             pfn::GetSystemProperties,
@@ -103,7 +101,7 @@ pub unsafe extern "system" fn xr_get_instance_proc_addr(
         >(xr_get_system_properties));
     }
 
-    if api_name == CStr::from_bytes_with_nul_unchecked(b"xrSuggestInteractionProfileBindings\0") {
+    if api_name == "xrSuggestInteractionProfileBindings" {
         INSTANCE.suggest_interaction_profile_bindings = Some(std::mem::transmute::<
             pfn::VoidFunction,
             pfn::SuggestInteractionProfileBindings,
@@ -114,7 +112,7 @@ pub unsafe extern "system" fn xr_get_instance_proc_addr(
         >(xr_suggest_interaction_profile_bindings));
     }
 
-    if api_name == CStr::from_bytes_with_nul_unchecked(b"xrCreateActionSpace\0") {
+    if api_name == "xrCreateActionSpace" {
         INSTANCE.create_action_space = Some(std::mem::transmute::<
             pfn::VoidFunction,
             pfn::CreateActionSpace,
@@ -125,7 +123,7 @@ pub unsafe extern "system" fn xr_get_instance_proc_addr(
         >(xr_create_action_space));
     }
 
-    if api_name == CStr::from_bytes_with_nul_unchecked(b"xrGetActionStatePose\0") {
+    if api_name == "xrGetActionStatePose" {
         INSTANCE.get_action_state_pose = Some(std::mem::transmute::<
             pfn::VoidFunction,
             pfn::GetActionStatePose,
@@ -136,7 +134,7 @@ pub unsafe extern "system" fn xr_get_instance_proc_addr(
         >(xr_get_action_state_pose));
     }
 
-    if api_name == CStr::from_bytes_with_nul_unchecked(b"xrLocateSpace\0") {
+    if api_name == "xrLocateSpace" {
         INSTANCE.locate_space = Some(std::mem::transmute::<pfn::VoidFunction, pfn::LocateSpace>(
             (*function).unwrap(),
         ));
@@ -145,7 +143,7 @@ pub unsafe extern "system" fn xr_get_instance_proc_addr(
         ));
     }
 
-    if api_name == CStr::from_bytes_with_nul_unchecked(b"xrPathToString\0") {
+    if api_name == "xrPathToString" {
         INSTANCE.path_to_string = Some(
             std::mem::transmute::<pfn::VoidFunction, pfn::PathToString>((*function).unwrap()),
         );
