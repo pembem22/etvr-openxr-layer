@@ -14,6 +14,9 @@ use openxr_sys::SpaceLocation;
 use openxr_sys::SystemId;
 use openxr_sys::SystemProperties;
 use openxr_sys::Time;
+use openxr_sys::View;
+use openxr_sys::ViewLocateInfo;
+use openxr_sys::ViewState;
 use openxr_sys::{pfn, Instance, Result};
 
 use openxr_sys::{loader::ApiLayerCreateInfo, InstanceCreateInfo};
@@ -143,6 +146,15 @@ pub unsafe extern "system" fn xr_get_instance_proc_addr(
         ));
     }
 
+    if api_name == "xrLocateViews" {
+        INSTANCE.locate_views = Some(std::mem::transmute::<pfn::VoidFunction, pfn::LocateViews>(
+            (*function).unwrap(),
+        ));
+        *function = Some(std::mem::transmute::<pfn::LocateViews, pfn::VoidFunction>(
+            xr_locate_views,
+        ));
+    }
+
     if api_name == "xrPathToString" {
         INSTANCE.path_to_string = Some(
             std::mem::transmute::<pfn::VoidFunction, pfn::PathToString>((*function).unwrap()),
@@ -204,4 +216,22 @@ unsafe extern "system" fn xr_locate_space(
     location: *mut SpaceLocation,
 ) -> Result {
     INSTANCE.locate_space(space, base_space, time, location)
+}
+
+unsafe extern "system" fn xr_locate_views(
+    session: Session,
+    view_locate_info: *const ViewLocateInfo,
+    view_state: *mut ViewState,
+    view_capacity_input: u32,
+    view_count_output: *mut u32,
+    views: *mut View,
+) -> Result {
+    INSTANCE.locate_views(
+        session,
+        view_locate_info,
+        view_state,
+        view_capacity_input,
+        view_count_output,
+        views,
+    )
 }

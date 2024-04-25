@@ -8,7 +8,8 @@ use openxr_sys::{
     pfn, Action, ActionSpaceCreateInfo, ActionStateGetInfo, ActionStatePose, BaseOutStructure,
     ExtensionProperties, EyeGazeSampleTimeEXT, Instance, InteractionProfileSuggestedBinding, Path,
     Quaternionf, Result, Session, Space, SpaceLocation, SpaceLocationFlags, StructureType,
-    SystemEyeGazeInteractionPropertiesEXT, SystemId, SystemProperties, Time, Vector3f,
+    SystemEyeGazeInteractionPropertiesEXT, SystemId, SystemProperties, Time, Vector3f, View,
+    ViewConfigurationType, ViewLocateInfo, ViewState,
 };
 
 use once_cell::sync::Lazy;
@@ -37,6 +38,7 @@ pub struct OpenXRLayer {
     pub create_action_space: Option<pfn::CreateActionSpace>,
     pub get_action_state_pose: Option<pfn::GetActionStatePose>,
     pub locate_space: Option<pfn::LocateSpace>,
+    pub locate_views: Option<pfn::LocateViews>,
 
     possible_spaces: HashMap<(Action, Path), Space>,
 
@@ -64,6 +66,7 @@ impl OpenXRLayer {
             r_eye_gaze_space: None,
             get_action_state_pose: None,
             locate_space: None,
+            locate_views: None,
             possible_spaces: HashMap::new(),
             start_time: SystemTime::now(),
             server: OSCServer::new(),
@@ -330,6 +333,83 @@ impl OpenXRLayer {
             eye_gaze_sample_time.time = Time::from_nanos(0);
             // println!("locate_space {:?}", eye_gaze_sample_time);
         }
+
+        Result::SUCCESS
+    }
+
+    pub unsafe fn locate_views(
+        &self,
+        session: Session,
+        view_locate_info: *const ViewLocateInfo,
+        view_state: *mut ViewState,
+        view_capacity_input: u32,
+        view_count_output: *mut u32,
+        views: *mut View,
+    ) -> Result {
+        let res = self.locate_views.unwrap()(
+            session,
+            view_locate_info,
+            view_state,
+            view_capacity_input,
+            view_count_output,
+            views,
+        );
+
+        if res != Result::SUCCESS {
+            return res;
+        }
+
+        if (*view_locate_info).view_configuration_type != ViewConfigurationType::PRIMARY_STEREO {
+            return Result::SUCCESS;
+        }
+
+        let views = std::slice::from_raw_parts_mut(views, (*view_count_output).try_into().unwrap());
+
+        let apply_pupil_offset = |view: &mut View, is_left: bool| {
+            use quat::QuaternionOps;
+            use quaternion_core as quat;
+
+            const EYEBALL_RADIUS: f32 = 12.0 * 0.1;
+
+            let pos = view.pose.position;
+            let mut pos = [pos.x, pos.y, pos.z];
+
+            let quat = view.pose.orientation;
+            let fwd_q = (quat.w, [quat.x, quat.y, quat.z]);
+
+            let mut fwd_v = quat::to_rotation_vector(fwd_q);
+            fwd_v = quat::normalize(fwd_v);
+
+            pos = pos.sub(fwd_v.scale(EYEBALL_RADIUS));
+
+            let eye_gaze_data = self.server.eye_gaze_data.lock().unwrap();
+
+            let (pitch, yaw) = if is_left {
+                (eye_gaze_data.l_pitch, eye_gaze_data.l_yaw)
+            } else {
+                (eye_gaze_data.r_pitch, eye_gaze_data.r_yaw)
+            };
+
+            let gaze_q = quat::from_euler_angles(
+                quat::RotationType::Extrinsic,
+                quat::RotationSequence::XYZ,
+                [pitch, yaw, 0.0],
+            );
+
+            let gaze_fwd_q = quat::mul(fwd_q, gaze_q);
+            let gaze_fwd_v = quat::normalize(quat::to_rotation_vector(gaze_fwd_q));
+
+            pos = pos.add(gaze_fwd_v.scale(EYEBALL_RADIUS));
+
+            view.pose.position = Vector3f {
+                x: pos[0],
+                y: pos[1],
+                z: pos[2],
+            }
+        };
+
+        apply_pupil_offset(&mut views[0], true);
+        apply_pupil_offset(&mut views[1], false);
 
         Result::SUCCESS
     }
