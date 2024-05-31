@@ -164,8 +164,7 @@ impl OpenXRLayer {
     ) -> Result {
         let suggested_bindings = &*suggested_bindings;
 
-        let interaction_profile =
-            self.path_to_string(instance, suggested_bindings.interaction_profile);
+        let interaction_profile = self.path_to_string(suggested_bindings.interaction_profile);
 
         println!(
             "suggest_interaction_profile_bindings {:?} {}",
@@ -188,7 +187,7 @@ impl OpenXRLayer {
         );
 
         for suggested_binding in suggested_bindings {
-            let binding = self.path_to_string(instance, suggested_binding.binding);
+            let binding = self.path_to_string(suggested_binding.binding);
             println!("suggest_interaction_profile_bindings binding path {binding}");
             if binding == "/user/eyes_ext/input/gaze_ext/pose" {
                 self.eye_gaze_action = Some(suggested_binding.action);
@@ -218,8 +217,8 @@ impl OpenXRLayer {
 
                 println!(
                     "test {:?} {:?}",
-                    self.path_to_string(instance, Path::from_raw(1)), // "/user/hand/left"
-                    self.path_to_string(instance, Path::from_raw(2)), // "/user/hand/right"
+                    self.path_to_string(Path::from_raw(1)), // "/user/hand/left"
+                    self.path_to_string(Path::from_raw(2)), // "/user/hand/right"
                 );
             }
         }
@@ -414,15 +413,15 @@ impl OpenXRLayer {
         Result::SUCCESS
     }
 
-    pub unsafe fn path_to_string(&self, instance: Instance, path: Path) -> String {
+    pub unsafe fn path_to_string(&self, path: Path) -> String {
         let mut buffer = vec![0u8; 128];
         let mut out_size = 0u32;
         self.path_to_string.unwrap()(
-            instance,
+            self.instance.unwrap(),
             path,
             buffer.len().try_into().unwrap(),
             &mut out_size as *mut u32,
-            buffer.as_mut_ptr() as *mut i8,
+            buffer.as_mut_ptr() as *mut u8,
         );
 
         CStr::from_bytes_until_nul(&buffer[..out_size as usize])
